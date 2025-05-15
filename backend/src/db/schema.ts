@@ -12,14 +12,14 @@ export const pointsTable = sqliteTable("points_table", {
   points: int(),
 });
 
-
-export const matchesFixtureTable = sqliteTable("matches_fixture",{
-  id: int().primaryKey({autoIncrement: true}),
-  matchNo: int(),
+export const matchesFixtureTable = sqliteTable("matches_fixture", {
+  id: int().primaryKey({ autoIncrement: true }),
+  matchNo: text(),
   time: text(),
+  date: text(),
   venue: text(),
   team1: text(),
   team2: text(),
   team1Logo: text(),
   team2Logo: text(),
-})
+});

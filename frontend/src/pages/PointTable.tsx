@@ -1,6 +1,28 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { useAppDispatch, useAppSelector } from "../hooks/hooks";
+import { fetchPointsTable } from "../store/pointsTableSlice";
 
 const PointTable = () => {
+  const dispatch = useAppDispatch();
+  const {
+    data: pointsData,
+    loading,
+    error,
+  } = useAppSelector((state) => state.pointsTable);
+
+  useEffect(() => {
+    dispatch(fetchPointsTable());
+  }, [dispatch]);
+
+  if (loading) {
+    return <div className="text-center mt-8">Loading...</div>;
+  }
+
+  if (error) {
+    return <div className="text-center mt-8 text-red-600">{error}</div>;
+  }
+
+  console.log("Points Data:", pointsData);
   return (
     <div className="container mx-auto px-4 py-8 ">
       <h1 className="text-3xl font-bold text-center mb-6">
@@ -19,28 +41,25 @@ const PointTable = () => {
           </tr>
         </thead>
         <tbody>
-          {/* Sample Data */}
-          {Array.from({ length: 10 }, (_, index) => (
-            <tr key={index} className="hover:bg-gray-100">
-              <td className="py-2 px-4 text-center">{index + 1}</td>
-              <td className="py-2 px-4 text-center">
-                Team {index + 1}
+          {pointsData.map((team) => (
+            <tr
+              key={`${team.team}-${team.position}`}
+              className="hover:bg-gray-100"
+            >
+              <td className="py-2 px-4 text-center">{team.position}</td>
+              <td className="py-2 px-4 flex items-center justify-center space-x-2">
+                <img
+                  src={team.teamLogo || null}
+                  alt={team.team}
+                  className="w-8 h-8 object-contain"
+                />
+                <span>{team.team}</span>
               </td>
-              <td className="py-2 px-4 text-center">
-                {Math.floor(Math.random() * 10)}
-              </td>
-              <td className="py-2 px-4 text-center">
-                {Math.floor(Math.random() * 10)}
-              </td>
-              <td className="py-2 px-4 text-center">
-                {Math.floor(Math.random() * 10)}
-              </td>
-              <td className="py-2 px-4 text-center">
-                {Math.floor(Math.random() * 20)}
-              </td>
-              <td className="py-2 px-4 text-center">
-                {(Math.random() * 2 - 1).toFixed(2)}
-              </td>
+              <td className="py-2 px-4 text-center">{team.played}</td>
+              <td className="py-2 px-4 text-center">{team.wins}</td>
+              <td className="py-2 px-4 text-center">{team.losses}</td>
+              <td className="py-2 px-4 text-center">{team.points}</td>
+              <td className="py-2 px-4 text-center">{team.nrr}</td>
             </tr>
           ))}
         </tbody>

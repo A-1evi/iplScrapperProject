@@ -1,8 +1,7 @@
 import "dotenv/config";
 import puppeteer, { Browser } from "puppeteer";
 import { drizzle } from "drizzle-orm/libsql";
-import { eq } from "drizzle-orm";
-import { pointsTable } from "./db/schema";
+import { matchesFixtureTable, pointsTable } from "./db/schema";
 
 const db = drizzle(process.env.DB_FILE_NAME!);
 
@@ -10,22 +9,19 @@ const url = "https://www.iplt20.com";
 
 async function main() {
   try {
-    // Launch the browser
     const browser: Browser = await puppeteer.launch({
-      headless: false, // Set to true if you don't want to see the browser UI
+      headless: false,
       defaultViewport: null,
-      args: ["--start-maximized"], // Start with maximized window
+      args: ["--start-maximized"],
     });
 
     // Create a new page
     const page = await browser.newPage();
 
-    // Navigate to a website (example URL - replace with your target URL)
     await page.goto(url + "/points-table/men", {
       waitUntil: "networkidle2",
     });
 
-    // Wait for the table to be loaded
     await page.waitForSelector(".table-qualified");
 
     const pointsTableData = await page.evaluate(() => {
@@ -51,13 +47,34 @@ async function main() {
       });
     });
 
-    // Insert the scraped data into the database
-    for (const data of pointsTableData) {
-      await db.insert(pointsTable).values(data);
-    }
+    const existingData = await db.select().from(pointsTable);
 
-    const pointTableFromDb = await db.select().from(pointsTable);
-    console.log("Points Table Data from DB:", pointTableFromDb);
+    const hasDataChanged = pointsTableData.some((newData) => {
+      const existingTeam = existingData.find(
+        (team) => team.team === newData.team
+      );
+      if (!existingTeam) return true;
+
+      return (
+        existingTeam.position !== newData.position ||
+        existingTeam.played !== newData.played ||
+        existingTeam.wins !== newData.wins ||
+        existingTeam.losses !== newData.losses ||
+        existingTeam.points !== newData.points ||
+        existingTeam.nrr !== newData.nrr
+      );
+    });
+
+    if (hasDataChanged) {
+      await db.delete(pointsTable);
+
+      for (const data of pointsTableData) {
+        await db.insert(pointsTable).values(data);
+      }
+      console.log("Points table data updated with new values");
+    } else {
+      console.log("No changes in points table data, skipping update");
+    }
 
     await page.goto(url + "/matches/fixtures", {
       waitUntil: "networkidle2",
@@ -68,52 +85,39 @@ async function main() {
       const matches = Array.from(
         document.querySelectorAll("#team_archive > li")
       );
+
       return matches.map((match) => {
-        // Get match date
+        // Get match number
         const matchNoInfo = match
-          .querySelector("div:first-child > div:first-child > span:first-child")
+          .querySelector(".vn-matchOrder")
           ?.textContent?.trim();
 
-        // Get match time
+        // Get match date and time
+        const dateInfo = match
+          .querySelector(".vn-matchDate")
+          ?.textContent?.trim();
+
         const timeInfo = match
           .querySelector(".vn-matchTime")
           ?.textContent?.trim();
 
         // Get venue
-        const venue = match
-          .querySelector(
-            "div:first-child > div:nth-child(2) > span:first-child > p:first-child > span:first-child"
-          )
-          ?.textContent?.trim();
+        const venue = match.querySelector(".vn-venueDet")?.textContent?.trim();
 
         // Get teams info
-        const team1 = match
-          .querySelector(
-            "div:nth-child(2) div:nth-child(2) div:nth-child(1) div:nth-child(3) h3"
-          )
-          ?.textContent?.trim();
-        const team2 = match
-          .querySelector(
-            "div:nth-child(2) div:nth-child(2) div:nth-child(3) div:nth-child(3) h3"
-          )
+        const teams = match.querySelectorAll(".vn-shedTeam");
+        const team1 = teams[0]?.querySelector("h3")?.textContent?.trim();
+        const team2 = teams[1]
+          ?.querySelector(".vn-team-2 h3")
           ?.textContent?.trim();
 
         // Get team logos
-        const team1Logo =
-          (
-            match.querySelector(
-              "div:nth-child(2) div:nth-child(2) div:nth-child(1) img"
-            ) as HTMLImageElement
-          )?.src || "";
-        const team2Logo =
-          (
-            match.querySelector(
-              "div:nth-child(2) div:nth-child(2) div:nth-child(3) img"
-            ) as HTMLImageElement
-          )?.src || "";
+        const team1Logo = teams[0]?.querySelector("img")?.src || "";
+        const team2Logo = teams[1]?.querySelector("img")?.src || "";
 
         return {
           matchNo: matchNoInfo,
+          date: dateInfo,
           time: timeInfo,
           venue: venue,
           team1: {
@@ -127,21 +131,51 @@ async function main() {
         };
       });
     });
-    console.log("Points Table Data:", JSON.stringify(pointsTableData, null, 2));
-    console.log("Fixtures Data:", JSON.stringify(fixturesData, null, 2));
-    // console.log("Browser launched successfully!");
 
-    // Close the browser when done
+    const existingFixtures = await db.select().from(matchesFixtureTable);
+
+    const formattedFixtures = fixturesData.map((data) => ({
+      matchNo: data.matchNo,
+      date: data.date || "",
+      time: data.time || "",
+      venue: data.venue || "",
+      team1: data.team1.name,
+      team1Logo: data.team1.logo,
+      team2: data.team2.name,
+      team2Logo: data.team2.logo,
+    }));
+
+    const hasFixturesChanged = formattedFixtures.some((newFixture) => {
+      const existingFixture = existingFixtures.find(
+        (fix) => fix.matchNo === newFixture.matchNo
+      );
+      if (!existingFixture) return true;
+
+      return (
+        existingFixture.team1 !== newFixture.team1 ||
+        existingFixture.team2 !== newFixture.team2 ||
+        existingFixture.date !== newFixture.date ||
+        existingFixture.time !== newFixture.time ||
+        existingFixture.venue !== newFixture.venue
+      );
+    });
+
+    if (hasFixturesChanged) {
+      await db.delete(matchesFixtureTable);
+
+      for (const fixtureData of formattedFixtures) {
+        await db.insert(matchesFixtureTable).values(fixtureData);
+      }
+      console.log("Fixtures data updated with new values");
+    } else {
+      await db.select().from(matchesFixtureTable);
+      console.log("No changes in fixtures data, skipping update");
+    }
+
     await browser.close();
   } catch (error) {
     console.error("An error occurred:", error);
-  } finally {
-    // Disconnect from Prisma
   }
 }
 
-// Execute the main function
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+export default main;

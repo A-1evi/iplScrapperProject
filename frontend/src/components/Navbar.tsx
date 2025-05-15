@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router";
-import iplLogo from "../assets/iplLogo.svg"; // Adjust the path as necessary
+import iplLogo from "../assets/iplLogo.svg"; 
 
 const Navbar = () => {
   return (
@@ -41,14 +41,7 @@ const Navbar = () => {
                   Points Table
                 </Link>
               </li>
-              <li>
-                <Link
-                  className="text-white hover:text-indigo-200 px-3 py-2 rounded-md text-sm font-medium"
-                  to="/fullSchedule"
-                >
-                  Full Match Schedule
-                </Link>
-              </li>
+
               <li>
                 <Link
                   className="text-white hover:text-indigo-200 px-3 py-2 rounded-md text-sm font-medium"
